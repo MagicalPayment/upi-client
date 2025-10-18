@@ -23,7 +23,7 @@ const STORAGE_KEY_COMMENT = 'payment_session_comment';
 
 // --- Resolve endpoints (works from Live Server) ---
 const q = new URLSearchParams(location.search);
-const CLIENT_BASE  = (q.get('client')  || localStorage.getItem('clientBase')  || 'http://localhost:3001').replace(/\/+$/,'');
+const CLIENT_BASE  = (q.get('client')  || localStorage.getItem('clientBase')  || 'https://gradz.in').replace(/\/+$/,'');
 let   GATEWAY_BASE = (q.get('gateway') || localStorage.getItem('gatewayBase') || null);
 localStorage.setItem('clientBase', CLIENT_BASE);
 if (GATEWAY_BASE) localStorage.setItem('gatewayBase', GATEWAY_BASE);
@@ -99,7 +99,7 @@ async function loadConfigFromClient(timeoutMs = 3000){
     const r = await fetch(`${CLIENT_BASE}/config`, { credentials: 'omit', signal: controller.signal });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const cfg = await r.json();
-    if (!GATEWAY_BASE) GATEWAY_BASE = (cfg.gatewayUrl || 'http://localhost:3000').replace(/\/+$/,'');
+    if (!GATEWAY_BASE) GATEWAY_BASE = (cfg.gatewayUrl || 'https://pay.gradz.in').replace(/\/+$/,'');
     return cfg;
   } finally {
     clearTimeout(to);
@@ -267,7 +267,7 @@ async function boot(){
 
   socket.on('payment-timeup', comment => {
     if (comment !== currentComment) return;
-    setUIStatus('TIME UP');
+    setUIStatus('TIME UP'); 
     resetUI('⏰ Time up');
   });
 
