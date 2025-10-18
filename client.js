@@ -27,7 +27,7 @@ function gen() {
 }
 
 app.get('/config', (req, res) => {
-  res.json({ gatewayUrl: PAYMENTGATEWAY_URL, socketUrl: `http://localhost:${PORT}`, waitMinutes: WAIT_MIN });
+  res.json({ gatewayUrl: PAYMENTGATEWAY_URL, socketUrl: `https://gradz.in`, waitMinutes: WAIT_MIN });
 });
 
 app.get('/session/:comment', (req, res) => {
