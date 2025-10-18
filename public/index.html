@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Client – UPI Payment</title>
+  <link rel="stylesheet" href="./style.css" />
+  <!-- Load Socket.IO client from the CLIENT SERVER (port 3001) -->
+  <script src="https://pay.gradz.in/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>Client Payment</h1>
+
+    <!-- Amount input row -->
+    <div id="amountRow" class="row">
+      <label for="amountInput">Amount</label>
+      <input id="amountInput" type="number" min="1" step="1" placeholder="Enter amount" />
+      <button id="primaryBtn">Pay</button>
+    </div>
+
+    <!-- Key/Value status block (hidden until Pay is clicked) -->
+    <div id="kvBlock" class="kv hidden">
+      <div class="kv-item">
+        <div class="kv-key">Amount:</div>
+        <div id="amountOut" class="kv-val">—</div>
+      </div>
+      <div class="kv-item">
+        <div class="kv-key">Status:</div>
+        <div id="statusOut" class="kv-val">—</div>
+      </div>
+      <div class="kv-item">
+        <div class="kv-key">Time left:</div>
+        <div id="timer" class="kv-val">00:00</div>
+      </div>
+    </div>
+
+    <!-- Inline status message -->
+    <p id="status" class="status hidden"></p>
+  </div>
+
+  <script src="./script.js" defer></script>
+</body>
+</html>

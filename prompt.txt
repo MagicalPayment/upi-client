@@ -1,0 +1,9 @@
+in paymnet gateway server if Missing comment in URL or invalid command then it shoull redirect to a url 
+
+keep that url in .env like 
+
+REDIRECT_URL=
+
+
+
+so, give me fully modified code for modification required files 
