@@ -1,7 +1,5 @@
-// Client UI: single button toggles Pay <-> Cancel, with TIMEUP state
+// Client script — shows Cancel during active session
 let socket;
-let gatewayUrl = '';
-let socketUrl  = '';
 
 const amountRow   = document.getElementById('amountRow');
 const amountInput = document.getElementById('amountInput');
@@ -11,17 +9,26 @@ const amountOut = document.getElementById('amountOut');
 const statusOut = document.getElementById('statusOut');
 const timerEl   = document.getElementById('timer');
 
-const statusP   = document.getElementById('status');
-const primaryBtn= document.getElementById('primaryBtn');
+const statusP    = document.getElementById('status');
+const primaryBtn = document.getElementById('primaryBtn'); // Pay
+const cancelBtn  = document.getElementById('cancelBtn');  // NEW: Cancel (shown during session)
+
+const serverDownEl = document.getElementById('serverDown');
 
 let currentComment = null;
 let countdownInt   = null;
 let isActive       = false;
 
 const STORAGE_KEY_COMMENT = 'payment_session_comment';
-const DFL_STATUS = 'PENDING';
-const BTN_TEXT = { PAY: 'Pay', CANCEL: 'Cancel' };
 
+// --- Resolve endpoints (works from Live Server) ---
+const q = new URLSearchParams(location.search);
+const CLIENT_BASE  = (q.get('client')  || localStorage.getItem('clientBase')  || 'http://localhost:3001').replace(/\/+$/,'');
+let   GATEWAY_BASE = (q.get('gateway') || localStorage.getItem('gatewayBase') || null);
+localStorage.setItem('clientBase', CLIENT_BASE);
+if (GATEWAY_BASE) localStorage.setItem('gatewayBase', GATEWAY_BASE);
+
+// ---------- UI helpers ----------
 function hide(el){ el.classList.add('hidden'); }
 function show(el){ el.classList.remove('hidden'); }
 function fmtMMSS(remainingMs){
@@ -33,8 +40,28 @@ function fmtMMSS(remainingMs){
 function setUIAmount(val){ amountOut.textContent = val != null ? `₹${val}` : '—'; }
 function setUIStatus(text){ statusOut.textContent = (text || '—').toUpperCase(); }
 function setUITimer(ms){ timerEl.textContent = fmtMMSS(ms); }
-function setButtonPay(){ primaryBtn.textContent = BTN_TEXT.PAY; primaryBtn.classList.remove('cancel'); }
-function setButtonCancel(){ primaryBtn.textContent = BTN_TEXT.CANCEL; primaryBtn.classList.add('cancel'); }
+
+function serverDownUI() {
+  if (countdownInt) clearInterval(countdownInt);
+  currentComment = null;
+  isActive = false;
+
+  sessionStorage.removeItem(STORAGE_KEY_COMMENT);
+
+  hide(amountRow);
+  hide(kvBlock);
+  hide(cancelBtn);
+  hide(statusP);
+  hide(primaryBtn);
+  if (amountInput) {
+    amountInput.value = '';
+    amountInput.placeholder = '';
+    amountInput.disabled = true;
+  }
+
+  show(serverDownEl);
+  serverDownEl.textContent = 'server down — please check your server';
+}
 
 function resetUI(msg){
   if (countdownInt) clearInterval(countdownInt);
@@ -46,6 +73,7 @@ function resetUI(msg){
 
   show(amountRow);
   hide(kvBlock);
+  hide(cancelBtn);
 
   amountInput.disabled = false;
   amountInput.value = '';
@@ -55,23 +83,41 @@ function resetUI(msg){
   setUIStatus('—');
   setUITimer(0);
 
-  setButtonPay();
   primaryBtn.disabled = false;
 
   if (msg) { statusP.textContent = msg; show(statusP); }
   else { hide(statusP); }
+
+  hide(serverDownEl);
 }
 
-async function fetchConfig(){
-  const cfg = await fetch('/config').then(r=>r.json());
-  gatewayUrl = cfg.gatewayUrl;
-  socketUrl  = cfg.socketUrl;
+// ---------- network helpers ----------
+async function loadConfigFromClient(timeoutMs = 3000){
+  const controller = new AbortController();
+  const to = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${CLIENT_BASE}/config`, { credentials: 'omit', signal: controller.signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const cfg = await r.json();
+    if (!GATEWAY_BASE) GATEWAY_BASE = (cfg.gatewayUrl || 'http://localhost:3000').replace(/\/+$/,'');
+    return cfg;
+  } finally {
+    clearTimeout(to);
+  }
 }
 
-async function getServerSession(comment){
-  const r = await fetch(`/session/${encodeURIComponent(comment)}`);
-  if (!r.ok) return null;
-  return r.json();
+async function getServerSession(comment, timeoutMs = 3000){
+  const controller = new AbortController();
+  const to = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${CLIENT_BASE}/session/${encodeURIComponent(comment)}`, { credentials: 'omit', signal: controller.signal });
+    if (!r.ok) return null;
+    return r.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(to);
+  }
 }
 
 function startCountdown(){
@@ -84,12 +130,10 @@ function startCountdown(){
     }
     const remain = Math.max(0, s.expiresAt - Date.now());
     setUITimer(remain);
-    setUIStatus(s.status || DFL_STATUS);
+    setUIStatus(s.status || 'PENDING');
     if (remain <= 0) {
       clearInterval(countdownInt);
-      // Tell server: TIMEUP (do NOT cancel gateway)
-      // eslint-disable-next-line no-undef
-      socket.emit('payment-timeup', currentComment);
+      try { socket.emit('payment-timeup', currentComment); } catch {}
       setUIStatus('TIME UP');
       resetUI('⏰ Time up');
     }
@@ -100,13 +144,16 @@ function enterActiveState(amount, expiresAt){
   isActive = true;
   hide(amountRow);
   show(kvBlock);
+  show(cancelBtn);                 // <-- show cancel during session
+  cancelBtn.disabled = false;
+
   setUIAmount(amount);
-  setUIStatus(DFL_STATUS);
+  setUIStatus('PENDING'); 
   setUITimer(Math.max(0, expiresAt - Date.now()));
-  setButtonCancel();
-  primaryBtn.disabled = false;
+
   statusP.textContent = 'Waiting for payment…';
   show(statusP);
+
   startCountdown();
 }
 
@@ -114,8 +161,7 @@ function restoreIfAny(){
   const saved = sessionStorage.getItem(STORAGE_KEY_COMMENT);
   if (!saved) return false;
   currentComment = saved;
-  // eslint-disable-next-line no-undef
-  socket.emit('join-session', currentComment);
+  try { socket.emit('join-session', currentComment); } catch {}
   getServerSession(currentComment).then(s => {
     if (!s) { resetUI('⏰ Time up'); return; }
     enterActiveState(s.amount, s.expiresAt);
@@ -123,100 +169,109 @@ function restoreIfAny(){
   return true;
 }
 
+// ---------- boot ----------
 async function boot(){
-  await fetchConfig();
-  // eslint-disable-next-line no-undef
-  socket = io(socketUrl);
+  // 1) Detect server down quickly
+  try {
+    await loadConfigFromClient(3000);
+  } catch {
+    serverDownUI();
+    return;
+  }
 
-  socket.on('connect', ()=> console.log('[client] socket connected', socket.id));
+  // 2) Socket connection (guard timeout)
+  let connected = false;
+  try {
+    socket = io(CLIENT_BASE, { transports: ['websocket'], timeout: 3000 });
+    socket.on('connect', () => { connected = true; });
+    const connectTimer = setTimeout(() => {
+      if (!connected) { try { socket.close(); } catch {} serverDownUI(); }
+    }, 3000);
+    socket.on('connect', () => clearTimeout(connectTimer));
+    socket.on('connect_error', () => { clearTimeout(connectTimer); if (!connected) serverDownUI(); });
+    socket.on('error',        () => { clearTimeout(connectTimer); if (!connected) serverDownUI(); });
+    socket.on('reconnect_error', () => { clearTimeout(connectTimer); if (!connected) serverDownUI(); });
+  } catch {
+    serverDownUI();
+    return;
+  }
 
+  // 3) Pay
   primaryBtn.addEventListener('click', async ()=>{
-    if (!isActive) {
-      // PAY flow
-      const amt = Number(String(amountInput.value || '').trim());
-      if (!amt || isNaN(amt) || amt <= 0) {
-        statusP.textContent='Please enter a valid amount';
-        show(statusP);
-        return;
-      }
-      primaryBtn.disabled = true; amountInput.disabled = true;
-      statusP.textContent = 'Generating payment link…'; show(statusP);
-      // eslint-disable-next-line no-undef
+    const amt = Number(String(amountInput.value || '').trim());
+    if (!amt || isNaN(amt) || amt <= 0) {
+      statusP.textContent='Please enter a valid amount';
+      show(statusP);
+      return;
+    }
+    primaryBtn.disabled = true; amountInput.disabled = true;
+    statusP.textContent = 'Generating payment link…'; show(statusP);
+    try {
       socket.emit('payment', amt);
-    } else {
-      // CANCEL flow
-      primaryBtn.disabled = true;
-      if (!currentComment) return;
-      try {
-        await fetch(`${gatewayUrl}/api/cancel/${encodeURIComponent(currentComment)}`, { method: 'POST' }).catch(()=>{});
-      } catch {}
-      // eslint-disable-next-line no-undef
-      socket.emit('payment-cancel', currentComment);
-      resetUI('❌ Payment cancelled by user');
+    } catch {
+      serverDownUI();
     }
   });
 
-  // eslint-disable-next-line no-undef
+  // 4) Cancel (NEW: separate button)
+  cancelBtn.addEventListener('click', async ()=>{
+    cancelBtn.disabled = true;
+    if (!currentComment) return;
+    try {
+      await fetch(`${GATEWAY_BASE}/api/cancel/${encodeURIComponent(currentComment)}`, { method: 'POST' }).catch(()=>{});
+    } catch {}
+    try { socket.emit('payment-cancel', currentComment); } catch {}
+    resetUI('❌ Payment cancelled by user');
+  });
+
+  // 5) Socket events
   socket.on('session-created', payload => {
     const { comment, amount, expiresAt } = payload || {};
-    if (!comment || !amount || !expiresAt) {
-      resetUI('❌ Error starting session');
-      return;
-    }
+    if (!comment || !amount || !expiresAt) { resetUI('❌ Error starting session'); return; }
     currentComment = comment;
     sessionStorage.setItem(STORAGE_KEY_COMMENT, currentComment);
-    // eslint-disable-next-line no-undef
-    socket.emit('join-session', currentComment);
-    window.open(`${gatewayUrl}/${encodeURIComponent(currentComment)}`, '_blank');
+    try { socket.emit('join-session', currentComment); } catch {}
+    window.open(`${GATEWAY_BASE}/${encodeURIComponent(currentComment)}`, '_blank');
     enterActiveState(amount, expiresAt);
   });
 
-  // Back-compat
-  // eslint-disable-next-line no-undef
+  // Back-compat (if emitted)
   socket.on('payment-comment', comment => {
     currentComment = comment;
     sessionStorage.setItem(STORAGE_KEY_COMMENT, currentComment);
-    // eslint-disable-next-line no-undef
-    socket.emit('join-session', currentComment);
+    try { socket.emit('join-session', currentComment); } catch {}
     getServerSession(currentComment).then(s => {
       if (!s) { resetUI('❌ Error starting session'); return; }
-      window.open(`${gatewayUrl}/${encodeURIComponent(currentComment)}`, '_blank');
+      window.open(`${GATEWAY_BASE}/${encodeURIComponent(currentComment)}`, '_blank');
       enterActiveState(s.amount, s.expiresAt);
     });
   });
 
-  // Gateway → failure (amount mismatch)
-  // eslint-disable-next-line no-undef
   socket.on('payment-failure', comment => {
     if (comment !== currentComment) return;
     setUIStatus('FAILED');
     resetUI('❌ Payment failed');
   });
 
-  // Gateway → success
-  // eslint-disable-next-line no-undef
   socket.on('payment-success', comment => {
     if (comment !== currentComment) return;
     setUIStatus('SUCCESS');
     resetUI('✅ Payment successful');
   });
 
-  // Server → cancelled by user
-  // eslint-disable-next-line no-undef
   socket.on('payment-cancelled', comment => {
     if (comment !== currentComment) return;
     setUIStatus('CANCELLED');
     resetUI('❌ Payment cancelled by user');
   });
 
-  // TIMEUP from server/gateway
-  // eslint-disable-next-line no-undef
   socket.on('payment-timeup', comment => {
     if (comment !== currentComment) return;
     setUIStatus('TIME UP');
     resetUI('⏰ Time up');
   });
 
+  // 6) Try restoring (only if server is up)
   restoreIfAny();
 }
 
