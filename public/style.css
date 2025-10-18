@@ -11,20 +11,28 @@ html, body {
   height: 100%;
 }
 
-.container {
+/* Card used in index.html */
+.card {
   width: 100%;
   max-width: 520px;
   margin: min(8vh, 64px) auto;
-  padding: clamp(14px, 3vw, 20px);
-  background: #111827;        /* gray-900 */
-  border: 1px solid #1f2937;  /* gray-800 */
-  border-radius: 12px;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
 }
 
 h1 {
   margin: 0 0 12px;
   font-size: clamp(18px, 2.6vw, 22px);
   font-weight: 700;
+}
+
+/* Generic row for input + button */
+.row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .field {
@@ -47,6 +55,7 @@ input[type="number"] {
   color: #e5e7eb;
   outline: none;
   font-size: 16px;
+  flex: 1; /* so it grows inside .row */
 }
 input[type="number"]::placeholder { color: #94a3b8; } /* slate-400 */
 input[type="number"]:focus {
@@ -82,6 +91,7 @@ input[type="number"]:focus {
   flex-wrap: wrap;
 }
 
+/* Buttons (used by Pay/Cancel now via class="btn") */
 .btn {
   appearance: none;
   border: none;
@@ -108,11 +118,23 @@ input[type="number"]:focus {
   color: #fbbf24; /* amber-400 default helper message */
 }
 
+/* New: muted helper text and server-down notice */
+.muted {
+  color: #9ca3af;
+  margin-top: 6px;
+}
+#serverDown {
+  margin-top: 16px;
+  font-weight: 800;
+  text-align: center;
+  color: #fca5a5;
+}
+
 .hidden { display: none !important; }
 
 /* Responsive tweaks */
 @media (max-width: 480px) {
-  .container { margin: 4vh auto; padding: 12px; }
+  .card { margin: 4vh auto; padding: 12px; }
   .kv-row { grid-template-columns: 100px 1fr; }
 }
 @media (max-width: 360px) {
