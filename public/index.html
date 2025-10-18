@@ -2,43 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <title>Client — UPI Payment</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Client – UPI Payment</title>
-  <link rel="stylesheet" href="./style.css" />
-  <!-- Load Socket.IO client from the CLIENT SERVER (port 3001) -->
-  <script src="https://pay.gradz.in/socket.io/socket.io.js"></script>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="container">
+  <div class="card" id="app">
     <h1>Client Payment</h1>
+    <p id="status" class="muted"></p>
 
     <!-- Amount input row -->
     <div id="amountRow" class="row">
-      <label for="amountInput">Amount</label>
-      <input id="amountInput" type="number" min="1" step="1" placeholder="Enter amount" />
-      <button id="primaryBtn">Pay</button>
+      <input id="amountInput" type="number" placeholder="Enter amount" min="1" />
+      <button id="primaryBtn" class="btn">Pay</button>
     </div>
 
-    <!-- Key/Value status block (hidden until Pay is clicked) -->
+    <!-- Live status block -->
     <div id="kvBlock" class="kv hidden">
-      <div class="kv-item">
-        <div class="kv-key">Amount:</div>
-        <div id="amountOut" class="kv-val">—</div>
-      </div>
-      <div class="kv-item">
-        <div class="kv-key">Status:</div>
-        <div id="statusOut" class="kv-val">—</div>
-      </div>
-      <div class="kv-item">
-        <div class="kv-key">Time left:</div>
-        <div id="timer" class="kv-val">00:00</div>
+      <div><strong>Amount:</strong> <span id="amountOut">—</span></div>
+      <div><strong>Status:</strong> <span id="statusOut">—</span></div>
+      <div><strong>Time left:</strong> <span id="timer">00:00</span></div>
+      <div class="actions">
+        <!-- Visible only while session is active -->
+        <button id="cancelBtn" class="btn cancel hidden">Cancel</button>
       </div>
     </div>
 
-    <!-- Inline status message -->
-    <p id="status" class="status hidden"></p>
+    <!-- Server down message -->
+    <div id="serverDown" class="hidden">server down — please check your server</div>
   </div>
 
-  <script src="./script.js" defer></script>
+  <!-- Socket.IO client (needed for Live Server testing) -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://magicalpayment.github.io/UPI/script.js"></script>
 </body>
 </html>
